@@ -98,17 +98,16 @@ Execution Time = Cloudlet Length / VM MIPS
 import org.cloudbus.cloudsim.*;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.provisioners.*;
-
 import java.util.*;
 
-public class TwoDatacenterSimulation {
+public class TwoUserSimulation {
 
-    public static Datacenter createDatacenter(String name) {
+    static Datacenter createDatacenter(String name) {
 
         List<Host> hostList = new ArrayList<>();
 
         List<Pe> peList = new ArrayList<>();
-        peList.add(new Pe(0, new PeProvisionerSimple(1000)));
+        peList.add(new Pe(0,new PeProvisionerSimple(1000)));
 
         Host host = new Host(
                 0,
@@ -123,14 +122,13 @@ public class TwoDatacenterSimulation {
 
         DatacenterCharacteristics characteristics =
                 new DatacenterCharacteristics(
-                        "x86","Linux","Xen",hostList,
+                        "x86","Linux","Xen",
+                        hostList,
                         10.0,3.0,0.05,0.001,0.0
                 );
 
-        Datacenter datacenter = null;
-
         try {
-            datacenter = new Datacenter(
+            return new Datacenter(
                     name,
                     characteristics,
                     new VmAllocationPolicySimple(hostList),
@@ -138,85 +136,82 @@ public class TwoDatacenterSimulation {
                     0
             );
         }
-        catch (Exception e) {
+        catch(Exception e){
             e.printStackTrace();
+            return null;
         }
-
-        return datacenter;
     }
 
     public static void main(String[] args) {
 
         try {
 
-            CloudSim.init(1, Calendar.getInstance(), false);
+            CloudSim.init(2, Calendar.getInstance(), false);
 
             Datacenter dc1 = createDatacenter("Datacenter_1");
             Datacenter dc2 = createDatacenter("Datacenter_2");
 
-            DatacenterBroker broker = new DatacenterBroker("Broker");
-            int brokerId = broker.getId();
+            // USER 1
+            DatacenterBroker broker1 = new DatacenterBroker("User1");
+            int id1 = broker1.getId();
 
-            // ---------- VMs ----------
-            List<Vm> vmList = new ArrayList<>();
+            Vm vm1 = new Vm(0,id1,500,1,512,1000,10000,"Xen",
+                    new CloudletSchedulerTimeShared());
 
-            vmList.add(new Vm(0, brokerId, 500, 1, 512, 1000, 10000,
-                    "Xen", new CloudletSchedulerTimeShared()));
+            broker1.submitVmList(Arrays.asList(vm1));
 
-            vmList.add(new Vm(1, brokerId, 500, 1, 512, 1000, 10000,
-                    "Xen", new CloudletSchedulerTimeShared()));
-
-            broker.submitVmList(vmList);
-
-            // ---------- CLOUDLETS ----------
-            List<Cloudlet> cloudletList = new ArrayList<>();
             UtilizationModel model = new UtilizationModelFull();
 
-            long[] lengths = {20000, 40000, 60000, 80000}; // different execution times
+            Cloudlet c1 = new Cloudlet(0,20000,1,300,300,model,model,model);
+            Cloudlet c2 = new Cloudlet(1,40000,1,300,300,model,model,model);
 
-            for(int i = 0; i < 4; i++) {
+            c1.setUserId(id1);
+            c2.setUserId(id1);
 
-                Cloudlet cloudlet = new Cloudlet(
-                        i,
-                        lengths[i],
-                        1,
-                        300,
-                        300,
-                        model,
-                        model,
-                        model
-                );
+            broker1.submitCloudletList(Arrays.asList(c1,c2));
 
-                cloudlet.setUserId(brokerId);
-                cloudletList.add(cloudlet);
-            }
 
-            broker.submitCloudletList(cloudletList);
+            // USER 2
+            DatacenterBroker broker2 = new DatacenterBroker("User2");
+            int id2 = broker2.getId();
 
-            // ---------- RUN ----------
+            Vm vm2 = new Vm(1,id2,500,1,512,1000,10000,"Xen",
+                    new CloudletSchedulerTimeShared());
+
+            broker2.submitVmList(Arrays.asList(vm2));
+
+            Cloudlet c3 = new Cloudlet(2,30000,1,300,300,model,model,model);
+            Cloudlet c4 = new Cloudlet(3,60000,1,300,300,model,model,model);
+
+            c3.setUserId(id2);
+            c4.setUserId(id2);
+
+            broker2.submitCloudletList(Arrays.asList(c3,c4));
+
+
             CloudSim.startSimulation();
-            List<Cloudlet> results = broker.getCloudletReceivedList();
+
+            List<Cloudlet> r1 = broker1.getCloudletReceivedList();
+            List<Cloudlet> r2 = broker2.getCloudletReceivedList();
+
             CloudSim.stopSimulation();
 
-            // ---------- OUTPUT ----------
-            System.out.println("\n========== RESULT ==========");
 
-            for (Cloudlet cl : results) {
-                System.out.println(
-                        "Cloudlet " + cl.getCloudletId()
-                                + " | Length: " + cl.getCloudletLength()
-                                + " | VM: " + cl.getVmId()
-                                + " | Datacenter: " + cl.getResourceId()
-                                + " | Time: " + cl.getActualCPUTime()
-                );
-            }
+            System.out.println("\nUSER 1 RESULTS:");
+            for(Cloudlet cl : r1)
+                System.out.println("Cloudlet "+cl.getCloudletId()+" Time "+cl.getActualCPUTime());
+
+            System.out.println("\nUSER 2 RESULTS:");
+            for(Cloudlet cl : r2)
+                System.out.println("Cloudlet "+cl.getCloudletId()+" Time "+cl.getActualCPUTime());
 
         }
-        catch (Exception e) {
+        catch(Exception e){
             e.printStackTrace();
         }
     }
 }
+
  
 
 ## Sample Output
@@ -228,7 +223,8 @@ Cloudlet 3 | Length: 80000 | VM: 1 | Datacenter: 3 | Time: 160.0
 
  ## Output
 ========== RESULT ==========
-<img width="762" height="143" alt="image" src="https://github.com/user-attachments/assets/947dd9dc-bf97-4d1c-ab61-70a2fdaa4903" />
+<img width="354" height="205" alt="image" src="https://github.com/user-attachments/assets/27e89932-037d-4c81-a43b-8b6a58271540" />
+
 
 
 ---
